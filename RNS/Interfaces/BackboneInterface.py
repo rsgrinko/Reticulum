@@ -180,7 +180,7 @@ class BackboneInterface(Interface):
             server_socket.bind(bind_address)
         else: raise TypeError(f"Invalid socket type {socket_type} for {interface}")
 
-        server_socket.listen(1)
+        server_socket.listen(128)
         server_socket.setblocking(0)
         BackboneInterface.listener_filenos[server_socket.fileno()] = (interface, server_socket)
         BackboneInterface.epoll.register(server_socket.fileno(), select.EPOLLIN)
@@ -319,6 +319,18 @@ class BackboneInterface(Interface):
                                 if fileno == server_socket.fileno() and (event & select.EPOLLIN):
                                     client_socket, address = server_socket.accept()
                                     client_socket.setblocking(0)
+                                    try:
+                                        client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                                        client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE,
+                                                                 int(BackboneClientInterface.TCP_PROBE_AFTER))
+                                        client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL,
+                                                                 int(BackboneClientInterface.TCP_PROBE_INTERVAL))
+                                        client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT,
+                                                                 int(BackboneClientInterface.TCP_PROBES))
+                                        client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT,
+                                                                 int(BackboneClientInterface.TCP_USER_TIMEOUT * 1000))
+                                    except Exception:
+                                        pass
                                     if not owner_interface.incoming_connection(client_socket):
                                         try: client_socket.close()
                                         except Exception as e: RNS.log(f"Error while closing socket for failed incoming connection: {e}", RNS.LOG_ERROR)
